@@ -1,0 +1,241 @@
+--- a/src/fair_credit_scoring/runner.py
++++ b/src/fair_credit_scoring/runner.py
+@@ -110,9 +110,9 @@
+             "model": model.name,
+             "split_id": splits.split_id,
+             "partition": partition,
+-            "validation_fold": splits.assignment[rows]
+-            if partition == "validation"
+-            else "",
++            "validation_fold": np.where(
++                splits.assignment[rows] >= 0, splits.assignment[rows], ""
++            ),
+         }
+     )
+
+@@ -126,110 +126,58 @@
+     }
+
+
+-def _forest_scores(factory, grid, config, x_train, y, a, weights, x_val, val_a):
+-    # Match the forest's native layouts once per fold instead of once per fit/predict.
+-    if hasattr(x_train, "tocsc"):
+-        x_train = x_train.astype(np.float32, copy=False).tocsc()
+-        x_val = x_val.astype(np.float32, copy=False).tocsr()
+-    else:
+-        x_train = np.asarray(x_train, dtype=np.float32)
+-        x_val = np.asarray(x_val, dtype=np.float32)
+-
+-    groups = {}
+-    for index, params in enumerate(grid):
+-        count = params.get("n_estimators")
+-        if (
+-            config.threads != 1
+-            or type(count) is not int
+-            or count < 1
+-            or "warm_start" in params
+-            or params.get("oob_score")
+-            or params.get("class_weight") == "balanced"
+-        ):
+-            yield (
+-                index,
+-                _fit_score(
+-                    factory, params, config, x_train, y, a, weights, x_val, val_a
+-                ),
+-            )
+-            continue
+-        structure = {
+-            key: value for key, value in params.items() if key != "n_estimators"
+-        }
+-        key = json.dumps(structure, sort_keys=True)
+-        groups.setdefault(key, []).append((count, index, params))
+-
+-    for candidates in groups.values():
+-        if len(candidates) == 1:
+-            _, index, params = candidates[0]
+-            yield (
+-                index,
+-                _fit_score(
+-                    factory, params, config, x_train, y, a, weights, x_val, val_a
+-                ),
+-            )
+-            continue
+-        candidates.sort()
+-        estimator = factory(
+-            candidates[0][2] | {"warm_start": True}, config.seed, config.threads
+-        )
+-        previous_count = 0
+-        for count, index, _ in candidates:
+-            if count != previous_count:
+-                # With a fixed seed, a larger forest starts with the same tree sequence.
+-                estimator.classifier.set_params(n_estimators=count)
+-                estimator.fit(x_train, y, a=a, sample_weight=weights)
+-                score = _probability(estimator, x_val, val_a)
+-                previous_count = count
+-            yield index, score
+-
+-
+-def _oof_scores(config, data, splits, factories, weight, candidates):
+-    dev = splits.development
+-    dataset = config.dataset
+-    scores = [np.empty((len(grid), len(dev))) for grid in candidates]
+-    for train, validation in splits.folds:
+-        preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
+-        x_train, x_val = prepare_fold(preprocessor, data.features, train, validation)
+-        y, a, val_a = data.y[train], data.a[train], data.a[validation]
+-        weights = _weights(weight, y, a)
+-        val_positions = np.searchsorted(dev, validation)
+-        for factory, grid, predictions in zip(
+-            factories, candidates, scores, strict=True
+-        ):
+-            if factory is BUILTIN_ESTIMATORS["random_forest"] and len(grid) > 1:
+-                for index, score in _forest_scores(
+-                    factory, grid, config, x_train, y, a, weights, x_val, val_a
+-                ):
+-                    predictions[index, val_positions] = score
+-                continue
+-            for index, params in enumerate(grid):
+-                predictions[index, val_positions] = _fit_score(
+-                    factory, params, config, x_train, y, a, weights, x_val, val_a
+-                )
+-        del x_train, x_val
+-    return scores
+-
+-
+ def _run_models(config, data, splits, factories, weight, post_factory, metrics, output):
+     dev, test = splits.development, splits.test
+     dev_y, dev_a = data.y[dev], data.a[dev]
+     objective = metrics[config.selection_metric]
+     dataset = config.dataset
+     selection = {}
+-    policies = []
+-    candidates = [model.candidates() for model in config.models]
+-    scores = _oof_scores(config, data, splits, factories, weight, candidates)
+-
+-    for i, model in enumerate(config.models):
++    validation_predictions = []
++    test_predictions = []
++    for model, factory in zip(config.models, factories, strict=True):
++        candidates = model.candidates()
++        scores = []
++        for params in candidates:
++            oof = np.empty(len(dev))
++            for train, validation in splits.folds:
++                preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
++                x_train, x_val = prepare_fold(
++                    preprocessor, data.features, train, validation
++                )
++                y, a = data.y[train], data.a[train]
++                oof[np.searchsorted(dev, validation)] = _fit_score(
++                    factory,
++                    params,
++                    config,
++                    x_train,
++                    y,
++                    a,
++                    _weights(weight, y, a),
++                    x_val,
++                    data.a[validation],
++                )
++            scores.append(oof)
+         params, val_score, threshold, objective_value = _select(
+-            candidates[i], scores[i], config.thresholds, objective, dev_y, dev_a
++            candidates, scores, config.thresholds, objective, dev_y, dev_a
+         )
+         postprocessor = None if post_factory is None else post_factory()
+         if postprocessor is not None:
+             postprocessor.fit(val_score, dev_y, dev_a, threshold)
+-        policies.append(postprocessor)
+         val_decision = _decisions(val_score, dev_a, threshold, postprocessor)
++        preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
++        x_train, x_test = prepare_fold(preprocessor, data.features, dev, test)
++        test_score = _fit_score(
++            factory,
++            params,
++            config,
++            x_train,
++            dev_y,
++            dev_a,
++            _weights(weight, dev_y, dev_a),
++            x_test,
++            data.a[test],
++        )
++        test_decision = _decisions(test_score, data.a[test], threshold, postprocessor)
+         selection[model.name] = {
+             "params": params,
+             "threshold": threshold,
+@@ -237,42 +185,24 @@
+             "validation_metrics": _evaluate(
+                 metrics, dev_y, dev_a, val_score, val_decision
+             ),
++            "test_metrics": _evaluate(
++                metrics, data.y[test], data.a[test], test_score, test_decision
++            ),
+         }
+-        _predictions(
+-            data, dev, val_score, val_decision, config, model, splits, "validation"
+-        ).to_csv(
+-            output / "validation_predictions.csv", index=False, mode="a", header=i == 0
++        validation_predictions.append(
++            _predictions(
++                data, dev, val_score, val_decision, config, model, splits, "validation"
++            )
+         )
+-    del scores, val_score, val_decision
+-
+-    preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
+-    x_train, x_test = prepare_fold(preprocessor, data.features, dev, test)
+-    weights = _weights(weight, dev_y, dev_a)
+-    test_y, test_a = data.y[test], data.a[test]
+-    for i, (model, factory, postprocessor) in enumerate(
+-        zip(config.models, factories, policies, strict=True)
+-    ):
+-        settings = selection[model.name]
+-        test_score = _fit_score(
+-            factory,
+-            settings["params"],
+-            config,
+-            x_train,
+-            dev_y,
+-            dev_a,
+-            weights,
+-            x_test,
+-            test_a,
++        test_predictions.append(
++            _predictions(
++                data, test, test_score, test_decision, config, model, splits, "test"
++            )
+         )
+-        test_decision = _decisions(
+-            test_score, test_a, settings["threshold"], postprocessor
+-        )
+-        settings["test_metrics"] = _evaluate(
+-            metrics, test_y, test_a, test_score, test_decision
+-        )
+-        _predictions(
+-            data, test, test_score, test_decision, config, model, splits, "test"
+-        ).to_csv(output / "test_predictions.csv", index=False, mode="a", header=i == 0)
++    pd.concat(validation_predictions).to_csv(
++        output / "validation_predictions.csv", index=False
++    )
++    pd.concat(test_predictions).to_csv(output / "test_predictions.csv", index=False)
+     return selection
+
+
+@@ -313,13 +243,13 @@
+             selection = _run_models(
+                 config, data, splits, factories, weight, post_factory, metrics, output
+             )
+-        folds = pd.array(splits.assignment, dtype="Int8")
+-        folds[splits.test] = pd.NA
+         pd.DataFrame(
+             {
+                 "row_id": data.row_id,
+                 "partition": np.where(splits.assignment < 0, "test", "development"),
+-                "validation_fold": folds,
++                "validation_fold": np.where(
++                    splits.assignment >= 0, splits.assignment, ""
++                ),
+                 "split_id": splits.split_id,
+             }
+         ).to_csv(output / "splits.csv", index=False)
