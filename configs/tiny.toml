@@ -1,0 +1,24 @@
+run_id = "tiny-baseline"
+output_dir = "../outputs"
+seed = 37
+threads = 1
+thresholds = [0.4, 0.5, 0.6]
+
+[dataset]
+name = "synthetic-tiny"
+path = "../tests/fixtures/tiny.csv"
+numeric = ["income", "balance", "tenure"]
+categorical = ["channel", "region"]
+
+[[models]]
+name = "lr"
+estimator = "logistic_regression"
+[models.grid]
+C = [0.1, 0.5, 1.0, 2.0]
+
+[[models]]
+name = "rf"
+estimator = "random_forest"
+[models.grid]
+n_estimators = [16, 32, 48, 64]
+max_depth = [8]

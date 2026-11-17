@@ -1,0 +1,270 @@
+{
+  "tiny": {
+    "before": {
+      "label": "before-tiny",
+      "dataset": "synthetic-tiny",
+      "dataset_sha256": "ee05fec720154e1cb739dc37ad1bd17c725a00c9cf02d21c6c000640492f2791",
+      "config_sha256": "d43729637e4a5012b9a175ca65792faad184d351b0d51b59535f55a7ae5198be",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 6.347749166976428,
+          "peak_rss_bytes": 185810944
+        },
+        {
+          "seconds": 4.615660167008173,
+          "peak_rss_bytes": 212058112
+        },
+        {
+          "seconds": 4.619451750011649,
+          "peak_rss_bytes": 210288640
+        },
+        {
+          "seconds": 4.300895374995889,
+          "peak_rss_bytes": 209076224
+        },
+        {
+          "seconds": 5.474570082995342,
+          "peak_rss_bytes": 206422016
+        }
+      ],
+      "median_seconds": 4.619451750011649,
+      "median_peak_rss_bytes": 209076224,
+      "max_peak_rss_bytes": 212058112
+    },
+    "shared": {
+      "label": "shared-tiny",
+      "dataset": "synthetic-tiny",
+      "dataset_sha256": "ee05fec720154e1cb739dc37ad1bd17c725a00c9cf02d21c6c000640492f2791",
+      "config_sha256": "d43729637e4a5012b9a175ca65792faad184d351b0d51b59535f55a7ae5198be",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 3.736835208022967,
+          "peak_rss_bytes": 208388096
+        },
+        {
+          "seconds": 3.754552375001367,
+          "peak_rss_bytes": 216629248
+        },
+        {
+          "seconds": 3.684197166003287,
+          "peak_rss_bytes": 204603392
+        },
+        {
+          "seconds": 3.647329166997224,
+          "peak_rss_bytes": 210534400
+        },
+        {
+          "seconds": 3.7007620410004165,
+          "peak_rss_bytes": 208617472
+        }
+      ],
+      "median_seconds": 3.7007620410004165,
+      "median_peak_rss_bytes": 208617472,
+      "max_peak_rss_bytes": 216629248
+    },
+    "after": {
+      "label": "after-tiny",
+      "dataset": "synthetic-tiny",
+      "dataset_sha256": "ee05fec720154e1cb739dc37ad1bd17c725a00c9cf02d21c6c000640492f2791",
+      "config_sha256": "d43729637e4a5012b9a175ca65792faad184d351b0d51b59535f55a7ae5198be",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 3.4925038749934174,
+          "peak_rss_bytes": 216072192
+        },
+        {
+          "seconds": 3.4022260830097366,
+          "peak_rss_bytes": 218546176
+        },
+        {
+          "seconds": 3.458161749993451,
+          "peak_rss_bytes": 211288064
+        },
+        {
+          "seconds": 3.666104332980467,
+          "peak_rss_bytes": 208257024
+        },
+        {
+          "seconds": 3.413667875021929,
+          "peak_rss_bytes": 211091456
+        }
+      ],
+      "median_seconds": 3.458161749993451,
+      "median_peak_rss_bytes": 211288064,
+      "max_peak_rss_bytes": 218546176
+    }
+  },
+  "large": {
+    "before": {
+      "label": "before-large",
+      "dataset": "synthetic-large",
+      "dataset_sha256": "57accf8da5e632f4d47f0c73bd7c537f303b3c5afba09b66f39d2b8b58fb1068",
+      "config_sha256": "d9d822c54d043a45d9110ea49dc1c9c3d4505e4bb2e2da5ac28153b3e8fa5297",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 10.45383633300662,
+          "peak_rss_bytes": 236732416
+        },
+        {
+          "seconds": 9.759498375002295,
+          "peak_rss_bytes": 229015552
+        },
+        {
+          "seconds": 8.988810999988345,
+          "peak_rss_bytes": 228868096
+        }
+      ],
+      "median_seconds": 9.759498375002295,
+      "median_peak_rss_bytes": 229015552,
+      "max_peak_rss_bytes": 236732416
+    },
+    "shared": {
+      "label": "shared-large",
+      "dataset": "synthetic-large",
+      "dataset_sha256": "57accf8da5e632f4d47f0c73bd7c537f303b3c5afba09b66f39d2b8b58fb1068",
+      "config_sha256": "d9d822c54d043a45d9110ea49dc1c9c3d4505e4bb2e2da5ac28153b3e8fa5297",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 6.933012959023472,
+          "peak_rss_bytes": 238698496
+        },
+        {
+          "seconds": 6.837635083007626,
+          "peak_rss_bytes": 227606528
+        },
+        {
+          "seconds": 7.07244820901542,
+          "peak_rss_bytes": 235487232
+        }
+      ],
+      "median_seconds": 6.933012959023472,
+      "median_peak_rss_bytes": 235487232,
+      "max_peak_rss_bytes": 238698496
+    },
+    "after": {
+      "label": "after-large",
+      "dataset": "synthetic-large",
+      "dataset_sha256": "57accf8da5e632f4d47f0c73bd7c537f303b3c5afba09b66f39d2b8b58fb1068",
+      "config_sha256": "d9d822c54d043a45d9110ea49dc1c9c3d4505e4bb2e2da5ac28153b3e8fa5297",
+      "seed": 37,
+      "threads": 1,
+      "machine": {
+        "os": "Darwin",
+        "release": "27.2",
+        "arch": "arm64",
+        "logical_cpus": 10,
+        "chip": "Apple M2 Pro",
+        "ram_gib": 16
+      },
+      "versions": {
+        "python": "3.13.18",
+        "numpy": "2.5.3",
+        "pandas": "3.0.6",
+        "scipy": "1.18.1",
+        "scikit-learn": "1.9.1"
+      },
+      "samples": [
+        {
+          "seconds": 5.237356915982673,
+          "peak_rss_bytes": 229326848
+        },
+        {
+          "seconds": 5.228196667012526,
+          "peak_rss_bytes": 229556224
+        },
+        {
+          "seconds": 5.260023833019659,
+          "peak_rss_bytes": 237649920
+        }
+      ],
+      "median_seconds": 5.237356915982673,
+      "median_peak_rss_bytes": 229556224,
+      "max_peak_rss_bytes": 237649920
+    }
+  }
+}

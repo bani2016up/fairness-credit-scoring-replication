@@ -1,28 +1,32 @@
-# Proposed experiment protocol
+# Experiment protocol
 
 ## Comparison
 
-Use German Credit and Taiwan Credit. For each dataset, compare Logistic
-Regression and Random Forest as baselines, each with Reweighing and Reject
-Option Classification, plus a standalone Prejudice Remover model.
+The main experiments will use prepared German Credit and Taiwan Credit data.
+For each dataset, compare Logistic Regression and Random Forest as baselines,
+each with Reweighing and Reject Option Classification, plus a standalone
+Prejudice Remover model.
 
 Report ROC AUC on continuous repayment scores. Report profit, independence,
 separation, and sufficiency on credit decisions. Compare the paper's separation
 metric with the largest absolute group gap in FPR or TPR.
 
-## Shared data and evaluation
+## Shared evaluation
 
-- `row_id` identifies each record across outputs.
-- `y = 1` means repaid and `y = 0` means default.
-- `a` is the age group. Record the cutoff, its boundary, and how age is used in
-  the feature matrix when implementing the dataset loaders.
-- `score` is the predicted probability of repayment.
-- `decision = 1` means approved and `decision = 0` means declined.
+Use the same prepared row IDs, binary repayment labels, binary age group,
+dataset name, and seed for every method on a dataset. The dataset preparation
+records the age cutoff, its boundary, and whether age is used as a feature.
 
-Save a seeded 60/40 development/test split per dataset and reuse five folds
-within development. Fit preprocessing on each training fold. Use development
-results to choose model settings, thresholds, and fairness parameters. Evaluate
-on the held-out test split after those settings are fixed.
+Reserve 40% for testing with integer rounding up and use five shared
+development folds, stratified jointly on age group and repayment outcome.
+Fit preprocessing and any training weights on each fold's training rows.
+Select model settings and approval thresholds on pooled out-of-fold
+predictions, then calibrate a post-processor on the selected predictions
+when configured. Refit using all development rows and evaluate on the
+held-out test set with the selected settings fixed.
 
-Persist the dataset, method, model, seed, and split ID with validation and
-test predictions so comparisons can be regenerated.
+The bundled baseline uses balanced accuracy as a runnable selection
+criterion. The financial experiments can select the project profit
+metric through the same interface once its assumptions are specified.
+The saved per-row scores and decisions support the downstream fairness
+analysis and comparison with [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907).
