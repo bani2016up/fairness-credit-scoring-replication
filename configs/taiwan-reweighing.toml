@@ -1,0 +1,32 @@
+run_id = "taiwan-reweighing"
+seed = 1
+method = "reweighing"
+weight = "reweighing"
+weight_mode = "resample"
+
+[dataset]
+name = "taiwan"
+path = "../data/prepared/taiwan.csv"
+scaling = "max_abs"
+numeric = [
+    "AGE", "LIMIT_BAL", "CREDIT_AMNT",
+    "BILL_AMT1", "BILL_AMT2", "BILL_AMT3", "BILL_AMT4", "BILL_AMT5", "BILL_AMT6",
+    "PAY_AMT1", "PAY_AMT2", "PAY_AMT3", "PAY_AMT4", "PAY_AMT5", "PAY_AMT6",
+]
+categorical = [
+    "SEX", "EDUCATION", "MARRIAGE", "PAY_0",
+    "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6",
+]
+
+[[models]]
+name = "lr"
+estimator = "logistic_regression"
+[models.grid]
+C = [0.1, 1.0, 10.0]
+
+[[models]]
+name = "rf"
+estimator = "random_forest"
+[models.grid]
+n_estimators = [64, 128]
+max_depth = [6, 12]

@@ -1,0 +1,32 @@
+run_id = "german-reweighing"
+seed = 1
+method = "reweighing"
+weight = "reweighing"
+weight_mode = "resample"
+
+[dataset]
+name = "german"
+path = "../data/prepared/german.csv"
+scaling = "max_abs"
+numeric = [
+    "AGE", "duration", "CREDIT_AMNT", "installment_rate",
+    "resident_since", "num_credits", "people_maintenance",
+]
+categorical = [
+    "account_status", "credit_history", "purpose", "savings", "employment",
+    "status_gender", "guarantors", "property", "other_plans", "housing",
+    "job", "phone", "foreign",
+]
+
+[[models]]
+name = "lr"
+estimator = "logistic_regression"
+[models.grid]
+C = [0.1, 1.0, 10.0]
+
+[[models]]
+name = "rf"
+estimator = "random_forest"
+[models.grid]
+n_estimators = [64, 128]
+max_depth = [6, 12]

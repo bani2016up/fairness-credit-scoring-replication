@@ -3,16 +3,16 @@
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import MaxAbsScaler, OneHotEncoder, StandardScaler
 
 
 def make_preprocessor(
-    numeric: tuple[str, ...], categorical: tuple[str, ...]
+    numeric: tuple[str, ...], categorical: tuple[str, ...], *, scaling: str = "standard"
 ) -> ColumnTransformer:
     numbers = Pipeline(
         [
             ("impute", SimpleImputer(strategy="median", keep_empty_features=True)),
-            ("scale", StandardScaler()),
+            ("scale", MaxAbsScaler() if scaling == "max_abs" else StandardScaler()),
         ]
     )
     categories = Pipeline(

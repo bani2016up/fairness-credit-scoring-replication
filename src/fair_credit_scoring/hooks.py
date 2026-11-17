@@ -11,6 +11,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
 from .config import DatasetConfig
+from .reweighing import reweighing
 
 
 class Estimator(Protocol):
@@ -75,6 +76,8 @@ BUILTIN_ESTIMATORS = {
     "logistic_regression": _logistic_regression,
     "random_forest": _random_forest,
 }
+
+BUILTIN_WEIGHTS = {"reweighing": reweighing}
 
 
 def _auc(y, a, score, decision):
