@@ -17,6 +17,7 @@ class DatasetConfig:
     numeric: tuple[str, ...] = ()
     categorical: tuple[str, ...] = ()
     loader: str = "csv"
+    scaling: str = "standard"
 
     def __post_init__(self):
         columns = (*self.numeric, *self.categorical)
@@ -26,6 +27,8 @@ class DatasetConfig:
             raise ValueError("Declare at least one feature and list each feature once.")
         if {"row_id", "y", "a"}.intersection(columns):
             raise ValueError("row_id, y and a are reserved and cannot be features.")
+        if self.scaling not in {"standard", "max_abs"}:
+            raise ValueError("Dataset scaling must be 'standard' or 'max_abs'.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +67,7 @@ class RunConfig:
     method: str = "baseline"
     weight: str | None = None
     postprocessor: str | None = None
+    weight_mode: str = "sample_weight"
 
     def __post_init__(self):
         if not _IDENTIFIER.fullmatch(self.run_id):
@@ -84,6 +88,10 @@ class RunConfig:
             not math.isfinite(t) or not 0 <= t <= 1 for t in self.thresholds
         ):
             raise ValueError("Declare at least one finite threshold in [0, 1].")
+        if self.weight_mode not in {"sample_weight", "resample"}:
+            raise ValueError("Weight mode must be 'sample_weight' or 'resample'.")
+        if self.weight_mode == "resample" and self.weight is None:
+            raise ValueError("Resampling requires a weight hook.")
 
 
 def load_config(path: Path) -> RunConfig:

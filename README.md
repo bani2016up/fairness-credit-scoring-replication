@@ -1,6 +1,6 @@
 # Fairness in Credit Scoring Replication
 
-A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression and Random Forest and exposes hooks for the dataset, metrics, and fairness methods. The protocol describes the planned German Credit and Taiwan Credit comparisons.
+A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression and Random Forest and exposes hooks for the dataset, metrics, and fairness methods. See [the data and Reweighing handoff](docs/replication-data.md) for the real-data runs, audit and differences from the original study.
 
 ## Quick start
 
@@ -14,17 +14,25 @@ uv run --locked python -m fair_credit_scoring configs/tiny.toml
 
 The last command trains and evaluates both baselines on the committed synthetic fixture. It writes to `outputs/tiny-baseline/`. Use `--run-id another-run` for a repeat or `--output-dir path/to/outputs` to change the parent directory. Each run publishes a new directory after all files are ready.
 
+Run Reweighing on the two real datasets from the repository root.
+
+```sh
+uv run --locked python -m fair_credit_scoring.prepare_credit_data
+uv run --locked python -m fair_credit_scoring configs/german-reweighing.toml
+uv run --locked python -m fair_credit_scoring configs/taiwan-reweighing.toml
+```
+
 ## Prepared data and configuration
 
 | Input | Meaning |
 | --- | --- |
 | `row_id` | Stable, unique, nonblank string ID. Leading zeros are preserved. |
 | `y` | Binary outcome. `1` means repaid and `0` means default. |
-| `a` | Binary age group. The dataset owner records the age cutoff and which group is coded as `1`. |
+| `a` | Binary age group. German and Taiwan use `0` for age ≤ 25 and `1` for age > 25. |
 | Numeric features | Columns declared in `dataset.numeric`. Blank cells are missing. |
 | Categorical features | Columns declared in `dataset.categorical`. Blank cells are missing. |
 
-The built-in loader reads prepared CSVs. Save the real prepared inputs under `data/` and copy `configs/tiny.toml` to define their feature columns, paths, model grids, and run IDs. TOML paths are relative to the configuration file. Keep the dataset name and seed identical across methods on the same prepared dataset. The declared features govern whether raw age is included. The group label `a` is reserved metadata.
+The built-in loader reads prepared CSVs. TOML paths are relative to the configuration file. Keep the dataset name and seed identical across methods on the same prepared dataset. For German and Taiwan, `AGE` exposes the binary encoding as a feature and `a` remains reserved metadata.
 
 The runner sorts rows by ID, jointly stratifies on `(a, y)`, and reserves `ceil(0.4 × n)` rows for testing. It requires at least one test row and five development rows per stratum. Every development row is held out once across five shared folds. Median imputation, scaling, most-frequent categorical imputation, and one-hot encoding are learned on each training partition. Unseen categories produce an all-zero encoding for that feature.
 
@@ -58,7 +66,7 @@ Register custom components by name using `Hooks`, then select them in `RunConfig
 | Hook registry | Contract |
 | --- | --- |
 | `loaders` | `loader(dataset_config) -> pandas.DataFrame` with the prepared columns above. Select via `dataset.loader`. |
-| `weights` | `weight(y, a) -> weights` in training-row order. Called once per training fold and once on all development rows. Select via `weight`. |
+| `weights` | `weight(y, a) -> weights` in training-row order. Called once per training fold and once on all development rows. Select via `weight`. Built-in `reweighing` supports direct weighting or training-row resampling via `weight_mode`. |
 | `estimators` | `factory(params, seed, threads) -> estimator`. Implement `fit(X, y, *, a, sample_weight)`, `predict_proba(X, *, a)` and `classes_`. Matrices can be dense or sparse. See `SklearnEstimator` for adapting scikit-learn classifiers. Select via `models.estimator`. |
 | `metrics` | `metric(y, a, score, decision) -> float`. Use `selection_metric` to maximize it during tuning or `metrics` to add it to the report. |
 | `postprocessors` | A no-argument factory whose instance implements `fit(score, y, a, threshold)` and `predict(score, a) -> decisions`. An instance fits on the selected out-of-fold predictions for one model. Select via `postprocessor`. |

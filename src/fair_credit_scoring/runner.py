@@ -15,7 +15,7 @@ from threadpoolctl import threadpool_limits
 
 from .config import RunConfig
 from .data import load_csv, make_splits, prepare_dataset
-from .hooks import BUILTIN_ESTIMATORS, BUILTIN_METRICS, Hooks
+from .hooks import BUILTIN_ESTIMATORS, BUILTIN_METRICS, BUILTIN_WEIGHTS, Hooks
 from .preprocessing import make_preprocessor, prepare_fold
 
 
@@ -66,6 +66,23 @@ def _weights(weight, y, a):
             "Training weights must be a finite nonnegative vector with positive mass."
         )
     return values
+
+
+def _training_data(config, weight, x_train, y, a, split_index):
+    weights = _weights(weight, y, a)
+    if config.weight_mode == "sample_weight":
+        return x_train, y, a, weights
+
+    # One reproducible draw per training partition, shared by all models and grids.
+    rng = np.random.default_rng([config.seed, split_index])
+    probabilities = weights / weights.max()
+    rows = rng.choice(
+        len(y), size=len(y), replace=True, p=probabilities / probabilities.sum()
+    )
+    sampled_y = y[rows]
+    if not np.any(sampled_y == 0) or not np.any(sampled_y == 1):
+        raise ValueError("Weighted resampling produced only one training class.")
+    return x_train[rows], sampled_y, a[rows], None
 
 
 def _select(candidates, scores, thresholds, objective, y, a):
@@ -188,11 +205,13 @@ def _oof_scores(config, data, splits, factories, weight, candidates):
     dev = splits.development
     dataset = config.dataset
     scores = [np.empty((len(grid), len(dev))) for grid in candidates]
-    for train, validation in splits.folds:
-        preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
+    for fold, (train, validation) in enumerate(splits.folds):
+        preprocessor = make_preprocessor(
+            dataset.numeric, dataset.categorical, scaling=dataset.scaling
+        )
         x_train, x_val = prepare_fold(preprocessor, data.features, train, validation)
         y, a, val_a = data.y[train], data.a[train], data.a[validation]
-        weights = _weights(weight, y, a)
+        x_train, y, a, weights = _training_data(config, weight, x_train, y, a, fold)
         val_positions = np.searchsorted(dev, validation)
         for factory, grid, predictions in zip(
             factories, candidates, scores, strict=True
@@ -245,9 +264,13 @@ def _run_models(config, data, splits, factories, weight, post_factory, metrics, 
         )
     del scores, val_score, val_decision
 
-    preprocessor = make_preprocessor(dataset.numeric, dataset.categorical)
+    preprocessor = make_preprocessor(
+        dataset.numeric, dataset.categorical, scaling=dataset.scaling
+    )
     x_train, x_test = prepare_fold(preprocessor, data.features, dev, test)
-    weights = _weights(weight, dev_y, dev_a)
+    x_train, train_y, train_a, weights = _training_data(
+        config, weight, x_train, dev_y, dev_a, len(splits.folds)
+    )
     test_y, test_a = data.y[test], data.a[test]
     for i, (model, factory, postprocessor) in enumerate(
         zip(config.models, factories, policies, strict=True)
@@ -258,8 +281,8 @@ def _run_models(config, data, splits, factories, weight, post_factory, metrics, 
             settings["params"],
             config,
             x_train,
-            dev_y,
-            dev_a,
+            train_y,
+            train_a,
             weights,
             x_test,
             test_a,
@@ -292,7 +315,7 @@ def run(config: RunConfig, hooks: Hooks | None = None) -> Path:
     weight = (
         None
         if config.weight is None
-        else _lookup(hooks.weights, config.weight, "weight hook")
+        else _lookup(BUILTIN_WEIGHTS | hooks.weights, config.weight, "weight hook")
     )
     post_factory = (
         None

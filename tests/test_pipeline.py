@@ -118,8 +118,8 @@ def test_runner_fits_preprocessing_on_training_rows_only(
     original = runner.make_preprocessor
     fitted = set()
 
-    def recording_preprocessor(numeric, categorical):
-        preprocessor = original(numeric, categorical)
+    def recording_preprocessor(numeric, categorical, *, scaling):
+        preprocessor = original(numeric, categorical, scaling=scaling)
         fit_transform = preprocessor.fit_transform
 
         def record(features):
