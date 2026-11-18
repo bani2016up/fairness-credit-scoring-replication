@@ -1,6 +1,6 @@
 # Fairness in Credit Scoring Replication
 
-A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression and Random Forest and exposes hooks for the dataset, metrics, and fairness methods. See [the data and Reweighing handoff](docs/replication-data.md) for the real-data runs, audit and differences from the original study.
+A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression, Random Forest, and Prejudice Remover and exposes hooks for the dataset, metrics, and fairness methods. See [the experiment protocol](docs/protocol.md) and [the data and Reweighing notes](docs/replication-data.md) for methodology, data preparation, and differences from the original study.
 
 ## Quick start
 
@@ -10,17 +10,44 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run th
 uv python install 3.13
 uv sync --locked
 uv run --locked python -m fair_credit_scoring configs/tiny.toml
+uv run --locked python -m fair_credit_scoring configs/tiny-pr.toml
 ```
 
-The last command trains and evaluates both baselines on the committed synthetic fixture. It writes to `outputs/tiny-baseline/`. Use `--run-id another-run` for a repeat or `--output-dir path/to/outputs` to change the parent directory. Each run publishes a new directory after all files are ready.
+The synthetic smoke commands evaluate the baseline and Prejudice Remover configs on `tests/fixtures/tiny.csv` and write to `outputs/tiny-baseline/` and `outputs/tiny-pr/`. Use `--run-id another-run` for a repeat or `--output-dir path/to/outputs` to change the parent directory. Each run publishes a new directory after all files are ready.
 
-Run Reweighing on the two real datasets from the repository root.
+Prepare the real datasets and run the economic comparison suite (`profit_eq16`, `seed = 1`) from the repository root (`german-reweighing.toml` and `taiwan-reweighing.toml` remain available for the earlier `balanced_accuracy` runs):
 
 ```sh
 uv run --locked python -m fair_credit_scoring.prepare_credit_data
-uv run --locked python -m fair_credit_scoring configs/german-reweighing.toml
-uv run --locked python -m fair_credit_scoring configs/taiwan-reweighing.toml
+
+uv run --locked python -m fair_credit_scoring configs/german-baseline-profit.toml
+uv run --locked python -m fair_credit_scoring configs/german-reweighing-profit.toml
+uv run --locked python -m fair_credit_scoring configs/german-pr-sweep.toml
+
+uv run --locked python -m fair_credit_scoring configs/taiwan-baseline-profit.toml
+uv run --locked python -m fair_credit_scoring configs/taiwan-reweighing-profit.toml
+uv run --locked python -m fair_credit_scoring configs/taiwan-pr-sweep.toml
+
+# Verify cross-run alignment against prepared CSVs and build outputs/ manifest & control table
+uv run --locked python -m fair_credit_scoring.handoff \
+  outputs/german-baseline-profit \
+  outputs/german-reweighing-profit \
+  outputs/german-pr-sweep \
+  outputs/taiwan-baseline-profit \
+  outputs/taiwan-reweighing-profit \
+  outputs/taiwan-pr-sweep \
+  --output outputs/timur-handoff-manifest.csv \
+  --control-csv outputs/timur-control-table.csv
 ```
+
+The `handoff` command must be run from the repository root and requires `data/prepared/{german,taiwan}.csv` (run `prepare_credit_data` first on a fresh checkout). Saved runs write to `outputs/<run_id>/`, generated inventory and control tables go to `outputs/timur-handoff-manifest.csv` and `outputs/timur-control-table.csv`, and a committed reference control table comparing constant `approve-all` / `reject-all` policies with all 26 models lives at [docs/timur-control-table.csv](docs/timur-control-table.csv).
+
+## Handoff notes for post-processing (Reject Option Classification)
+
+- **Group direction**: `a = 0` means age $\le 25$, `a = 1` means age $> 25$ (reversed relative to the paper text notation).
+- **No test leakage**: `validation_predictions.csv` and `validation_metrics` were used to select hyperparameters and discrete `profit_eq16` thresholds. Calibrate Reject Option Classification only on `validation_predictions.csv` and evaluate once on `test_predictions.csv`.
+- **Shared metrics**: evaluate post-processed decisions directly via `fair_credit_scoring.evaluate_metrics(y, a, score, decision)` or plug a post-processor into `Hooks(postprocessors=...)` with `selection_metric = "profit_eq16"`. Undefined rates return `math.nan` (`null` in JSON).
+- **Covariates**: baseline and Reweighing configs include binary `AGE` (`= a`) in `dataset.numeric`; Prejudice Remover configs exclude `AGE` and route coefficients directly via `a`.
 
 ## Prepared data and configuration
 
@@ -32,11 +59,11 @@ uv run --locked python -m fair_credit_scoring configs/taiwan-reweighing.toml
 | Numeric features | Columns declared in `dataset.numeric`. Blank cells are missing. |
 | Categorical features | Columns declared in `dataset.categorical`. Blank cells are missing. |
 
-The built-in loader reads prepared CSVs. TOML paths are relative to the configuration file. Keep the dataset name and seed identical across methods on the same prepared dataset. For German and Taiwan, `AGE` exposes the binary encoding as a feature and `a` remains reserved metadata.
+The built-in loader reads prepared CSVs. TOML paths are relative to the configuration file. Keep the dataset name and seed identical across methods on the same prepared dataset. For German and Taiwan, baseline and Reweighing include binary `AGE` (= `a`) in `dataset.numeric`, whereas `prejudice_remover` excludes `AGE` from `dataset.numeric` and uses `a` directly to route group-specific coefficients.
 
 The runner sorts rows by ID, jointly stratifies on `(a, y)`, and reserves `ceil(0.4 × n)` rows for testing. It requires at least one test row and five development rows per stratum. Every development row is held out once across five shared folds. Median imputation, scaling, most-frequent categorical imputation, and one-hot encoding are learned on each training partition. Unseen categories produce an all-zero encoding for that feature.
 
-For each model, the runner evaluates the candidate grid and thresholds on pooled out-of-fold predictions. It maximizes `selection_metric` and breaks ties in configuration order. The bundled configs use balanced accuracy. Plug in the project's profit metric to tune against the paper's economic assumptions. Once settings and any post-processor are selected, the runner refits on all development rows and evaluates on the held-out test set. See [the experiment protocol](docs/protocol.md).
+For each model, the runner evaluates the candidate grid and thresholds on pooled out-of-fold predictions. It maximizes `selection_metric` and breaks ties in configuration order. `configs/tiny.toml` and `configs/german-reweighing.toml` / `configs/taiwan-reweighing.toml` use `balanced_accuracy`; the economic suite (`*-profit.toml` and `*-pr-sweep.toml`) uses `profit_eq16`. Once settings and any post-processor are selected, the runner refits on all development rows and evaluates on the held-out test set. See [the experiment protocol](docs/protocol.md).
 
 ## Python interface
 
@@ -67,8 +94,8 @@ Register custom components by name using `Hooks`, then select them in `RunConfig
 | --- | --- |
 | `loaders` | `loader(dataset_config) -> pandas.DataFrame` with the prepared columns above. Select via `dataset.loader`. |
 | `weights` | `weight(y, a) -> weights` in training-row order. Called once per training fold and once on all development rows. Select via `weight`. Built-in `reweighing` supports direct weighting or training-row resampling via `weight_mode`. |
-| `estimators` | `factory(params, seed, threads) -> estimator`. Implement `fit(X, y, *, a, sample_weight)`, `predict_proba(X, *, a)` and `classes_`. Matrices can be dense or sparse. See `SklearnEstimator` for adapting scikit-learn classifiers. Select via `models.estimator`. |
-| `metrics` | `metric(y, a, score, decision) -> float`. Use `selection_metric` to maximize it during tuning or `metrics` to add it to the report. |
+| `estimators` | `factory(params, seed, threads) -> estimator`. Implement `fit(X, y, *, a, sample_weight)`, `predict_proba(X, *, a)` and `classes_`. Matrices can be dense or sparse. Built-in options: `logistic_regression`, `random_forest`, and `prejudice_remover`. See `SklearnEstimator` for adapting scikit-learn classifiers. Select via `models.estimator`. |
+| `metrics` | `metric(y, a, score, decision) -> float`. Built-ins: `auc`, `balanced_accuracy`, `approval_rate`, `profit_eq16`, `ind`, `sp_paper`, `sf`, `eo_gap`, and group rates (`approval_rate_{0,1}`, `tpr_{0,1}`, `fpr_{0,1}`, `ppv_{0,1}`). Use `selection_metric` to maximize it during tuning or `metrics` to add it to the report. |
 | `postprocessors` | A no-argument factory whose instance implements `fit(score, y, a, threshold)` and `predict(score, a) -> decisions`. An instance fits on the selected out-of-fold predictions for one model. Select via `postprocessor`. |
 
 The CLI supports the built-in components. Pass a `Hooks` registry to the library entry point for project-specific methods. Custom components should use the supplied seed and thread budget and return finite scores and binary decisions.

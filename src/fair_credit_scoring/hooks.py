@@ -8,9 +8,10 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
 from .config import DatasetConfig
+from .metrics import METRICS
+from .prejudice_remover import prejudice_remover_factory
 from .reweighing import reweighing
 
 
@@ -75,25 +76,9 @@ def _random_forest(params, seed, threads):
 BUILTIN_ESTIMATORS = {
     "logistic_regression": _logistic_regression,
     "random_forest": _random_forest,
+    "prejudice_remover": prejudice_remover_factory,
 }
 
 BUILTIN_WEIGHTS = {"reweighing": reweighing}
 
-
-def _auc(y, a, score, decision):
-    return roc_auc_score(y, score)
-
-
-def _balanced_accuracy(y, a, score, decision):
-    return balanced_accuracy_score(y, decision)
-
-
-def _approval_rate(y, a, score, decision):
-    return np.mean(decision)
-
-
-BUILTIN_METRICS = {
-    "auc": _auc,
-    "balanced_accuracy": _balanced_accuracy,
-    "approval_rate": _approval_rate,
-}
+BUILTIN_METRICS = dict(METRICS)
