@@ -1,0 +1,33 @@
+run_id = "tiny-pr"
+output_dir = "../outputs"
+seed = 37
+threads = 1
+method = "prejudice_remover"
+selection_metric = "profit_eq16"
+metrics = [
+    "auc", "balanced_accuracy", "approval_rate", "profit_eq16",
+    "ind", "sp_paper", "sf", "eo_gap",
+    "approval_rate_0", "approval_rate_1", "tpr_0", "tpr_1",
+    "fpr_0", "fpr_1", "ppv_0", "ppv_1",
+]
+thresholds = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+[dataset]
+name = "synthetic-tiny"
+path = "../tests/fixtures/tiny.csv"
+numeric = ["income", "balance", "tenure"]
+categorical = ["channel", "region"]
+
+[[models]]
+name = "pr_eta_0"
+estimator = "prejudice_remover"
+[models.grid]
+eta = [0.0]
+l2_strength = [1.0]
+
+[[models]]
+name = "pr_eta_10"
+estimator = "prejudice_remover"
+[models.grid]
+eta = [10.0]
+l2_strength = [1.0]
