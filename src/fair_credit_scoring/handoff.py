@@ -58,7 +58,8 @@ def _sha256(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def _load_predictions(path: Path) -> pd.DataFrame:
+def load_predictions(path: Path) -> pd.DataFrame:
+    """Load a predictions CSV while preserving string identifiers."""
     return pd.read_csv(
         path,
         keep_default_na=False,
@@ -75,6 +76,9 @@ def _load_predictions(path: Path) -> pd.DataFrame:
     )
 
 
+_load_predictions = load_predictions
+
+
 def _group_runs_by_dataset(
     run_dirs: list[Path],
 ) -> dict[str, list[tuple[Path, dict]]]:
@@ -87,15 +91,19 @@ def _group_runs_by_dataset(
     return by_dataset
 
 
-def _write_csv(
+def write_csv(
     paths: list[Path], fieldnames: tuple[str, ...], rows: list[dict[str, str]]
 ) -> None:
+    """Write rows with fixed header columns to each destination CSV path."""
     for target in paths:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=fieldnames, lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
+
+
+_write_csv = write_csv
 
 
 def _assert_aligned_group(runs: list[tuple[Path, dict]], dataset_name: str) -> None:
@@ -163,8 +171,8 @@ def _assert_aligned_group(runs: list[tuple[Path, dict]], dataset_name: str) -> N
         elif [c for c in numeric if c != "AGE"] != reference_numeric_no_age:
             raise ValueError(f"{run_dir}: numeric covariates differ.")
 
-        val_df = _load_predictions(run_dir / "validation_predictions.csv")
-        test_df = _load_predictions(run_dir / "test_predictions.csv")
+        val_df = load_predictions(run_dir / "validation_predictions.csv")
+        test_df = load_predictions(run_dir / "test_predictions.csv")
         for model_name in meta["selected"]:
             val_model = val_df[val_df["model"] == model_name].reset_index(drop=True)
             test_model = test_df[test_df["model"] == model_name].reset_index(drop=True)
@@ -237,7 +245,7 @@ def build_handoff_manifest(
                     }
                 )
 
-    _write_csv(output_paths, MANIFEST_COLUMNS, rows)
+    write_csv(output_paths, MANIFEST_COLUMNS, rows)
     return rows
 
 
@@ -287,7 +295,7 @@ def build_control_table(
         first_model = next(iter(first_meta["selected"]))
 
         for partition in ("validation", "test"):
-            first_df = _load_predictions(first_dir / f"{partition}_predictions.csv")
+            first_df = load_predictions(first_dir / f"{partition}_predictions.csv")
             ref = first_df[first_df["model"] == first_model]
             y_ref = ref["y"].to_numpy()
             a_ref = ref["a"].to_numpy()
@@ -327,7 +335,7 @@ def build_control_table(
             )
 
             for run_dir, meta in group:
-                pred_df = _load_predictions(run_dir / f"{partition}_predictions.csv")
+                pred_df = load_predictions(run_dir / f"{partition}_predictions.csv")
                 method = meta["config"]["method"]
                 for model_name, sel in meta["selected"].items():
                     sub = pred_df[pred_df["model"] == model_name]
@@ -368,7 +376,7 @@ def build_control_table(
                         )
                     )
 
-    _write_csv(csv_outputs, CONTROL_TABLE_COLUMNS, rows)
+    write_csv(csv_outputs, CONTROL_TABLE_COLUMNS, rows)
     return rows
 
 

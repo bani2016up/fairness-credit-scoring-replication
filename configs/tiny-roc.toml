@@ -1,0 +1,38 @@
+run_id = "tiny-roc"
+output_dir = "../outputs"
+seed = 37
+threads = 1
+method = "reject_option"
+postprocessor = "reject_option"
+selection_metric = "profit_eq16"
+metrics = [
+    "auc", "balanced_accuracy", "approval_rate", "profit_eq16",
+    "ind", "sp_paper", "sf", "eo_gap",
+    "approval_rate_0", "approval_rate_1", "tpr_0", "tpr_1",
+    "fpr_0", "fpr_1", "ppv_0", "ppv_1",
+]
+thresholds = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+[postprocessor_params]
+fairness_metric = "sp_paper"
+fairness_bound = 0.05
+utility_metric = "profit_eq16"
+
+[dataset]
+name = "synthetic-tiny"
+path = "../tests/fixtures/tiny.csv"
+numeric = ["income", "balance", "tenure"]
+categorical = ["channel", "region"]
+
+[[models]]
+name = "lr"
+estimator = "logistic_regression"
+[models.grid]
+C = [0.1, 0.5, 1.0, 2.0]
+
+[[models]]
+name = "rf"
+estimator = "random_forest"
+[models.grid]
+n_estimators = [16, 32, 48, 64]
+max_depth = [8]

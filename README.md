@@ -1,6 +1,6 @@
 # Fairness in Credit Scoring Replication
 
-A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression, Random Forest, and Prejudice Remover and exposes hooks for the dataset, metrics, and fairness methods. See [the experiment protocol](docs/protocol.md) and [the data and Reweighing notes](docs/replication-data.md) for methodology, data preparation, and differences from the original study.
+A partial replication of [Fairness in Credit Scoring: Assessment, Implementation and Profit Implications](https://arxiv.org/abs/2103.01907). The experiment runner fits Logistic Regression, Random Forest, and Prejudice Remover, supports built-in Reject Option Classification post-processing, and exposes hooks for the dataset, metrics, and fairness methods. See [the experiment protocol](docs/protocol.md), [the data and Reweighing notes](docs/replication-data.md), and [the final analysis](docs/final-analysis.md) for methodology, data preparation, results, and differences from the original study.
 
 ## Quick start
 
@@ -11,11 +11,12 @@ uv python install 3.13
 uv sync --locked
 uv run --locked python -m fair_credit_scoring configs/tiny.toml
 uv run --locked python -m fair_credit_scoring configs/tiny-pr.toml
+uv run --locked python -m fair_credit_scoring configs/tiny-roc.toml
 ```
 
-The synthetic smoke commands evaluate the baseline and Prejudice Remover configs on `tests/fixtures/tiny.csv` and write to `outputs/tiny-baseline/` and `outputs/tiny-pr/`. Use `--run-id another-run` for a repeat or `--output-dir path/to/outputs` to change the parent directory. Each run publishes a new directory after all files are ready.
+The synthetic smoke commands evaluate the baseline, Prejudice Remover, and Reject Option Classification configs on `tests/fixtures/tiny.csv` and write to `outputs/tiny-baseline/`, `outputs/tiny-pr/`, and `outputs/tiny-roc/`. Use `--run-id another-run` for a repeat or `--output-dir path/to/outputs` to change the parent directory. Each run publishes a new directory after all files are ready.
 
-Prepare the real datasets and run the economic comparison suite (`profit_eq16`, `seed = 1`) from the repository root (`german-reweighing.toml` and `taiwan-reweighing.toml` remain available for the earlier `balanced_accuracy` runs):
+Prepare the real datasets and run the full 8-config economic comparison suite (`profit_eq16`, `seed = 1`) plus the Stage B ROC sweep and Stage C analysis from the repository root (`german-reweighing.toml` and `taiwan-reweighing.toml` remain available for the earlier `balanced_accuracy` runs):
 
 ```sh
 uv run --locked python -m fair_credit_scoring.prepare_credit_data
@@ -23,31 +24,40 @@ uv run --locked python -m fair_credit_scoring.prepare_credit_data
 uv run --locked python -m fair_credit_scoring configs/german-baseline-profit.toml
 uv run --locked python -m fair_credit_scoring configs/german-reweighing-profit.toml
 uv run --locked python -m fair_credit_scoring configs/german-pr-sweep.toml
+uv run --locked python -m fair_credit_scoring configs/german-roc-profit.toml
 
 uv run --locked python -m fair_credit_scoring configs/taiwan-baseline-profit.toml
 uv run --locked python -m fair_credit_scoring configs/taiwan-reweighing-profit.toml
 uv run --locked python -m fair_credit_scoring configs/taiwan-pr-sweep.toml
+uv run --locked python -m fair_credit_scoring configs/taiwan-roc-profit.toml
 
-# Verify cross-run alignment against prepared CSVs and build outputs/ manifest & control table
+# Verify cross-run alignment across all 8 runs and build outputs/ manifest & control table
 uv run --locked python -m fair_credit_scoring.handoff \
   outputs/german-baseline-profit \
   outputs/german-reweighing-profit \
   outputs/german-pr-sweep \
+  outputs/german-roc-profit \
   outputs/taiwan-baseline-profit \
   outputs/taiwan-reweighing-profit \
   outputs/taiwan-pr-sweep \
-  --output outputs/timur-handoff-manifest.csv \
-  --control-csv outputs/timur-control-table.csv
+  outputs/taiwan-roc-profit \
+  --output outputs/fedor-handoff-manifest.csv \
+  --control-csv outputs/fedor-control-table.csv
+
+# Run the Stage B ROC fairness-profit sweep and Stage C cross-method analysis
+uv run --locked python -m fair_credit_scoring.roc_experiment
+uv run --locked python -m fair_credit_scoring.analysis
 ```
 
-The `handoff` command must be run from the repository root and requires `data/prepared/{german,taiwan}.csv` (run `prepare_credit_data` first on a fresh checkout). Saved runs write to `outputs/<run_id>/`, generated inventory and control tables go to `outputs/timur-handoff-manifest.csv` and `outputs/timur-control-table.csv`, and a committed reference control table comparing constant `approve-all` / `reject-all` policies with all 26 models lives at [docs/timur-control-table.csv](docs/timur-control-table.csv).
+The `handoff` command must be run from the repository root and requires `data/prepared/{german,taiwan}.csv` (run `prepare_credit_data` first on a fresh checkout). Saved runs write to `outputs/<run_id>/`, the 8-run inventory and control tables go to `outputs/fedor-handoff-manifest.csv` and `outputs/fedor-control-table.csv` (the earlier 6-run reference control table comparing constant `approve-all` / `reject-all` policies with the 26 pre/in-processing/baseline models remains committed at [docs/timur-control-table.csv](docs/timur-control-table.csv)), the ROC sweep writes `outputs/roc-sweep-summary.csv` (and optional `outputs/roc-sweep-predictions/` with `--predictions-dir`), and `fair_credit_scoring.analysis` writes summary CSVs, PNG figures, and `analysis_report.json` under `outputs/analysis/`.
 
 ## Handoff notes for post-processing (Reject Option Classification)
 
 - **Group direction**: `a = 0` means age $\le 25$, `a = 1` means age $> 25$ (reversed relative to the paper text notation).
-- **No test leakage**: `validation_predictions.csv` and `validation_metrics` were used to select hyperparameters and discrete `profit_eq16` thresholds. Calibrate Reject Option Classification only on `validation_predictions.csv` and evaluate once on `test_predictions.csv`.
-- **Shared metrics**: evaluate post-processed decisions directly via `fair_credit_scoring.evaluate_metrics(y, a, score, decision)` or plug a post-processor into `Hooks(postprocessors=...)` with `selection_metric = "profit_eq16"`. Undefined rates return `math.nan` (`null` in JSON).
-- **Covariates**: baseline and Reweighing configs include binary `AGE` (`= a`) in `dataset.numeric`; Prejudice Remover configs exclude `AGE` and route coefficients directly via `a`.
+- **No test leakage**: `validation_predictions.csv` and `validation_metrics` were used to select hyperparameters and discrete `profit_eq16` thresholds. Built-in `reject_option` (`RejectOptionClassifier`) calibrates `(threshold, margin)` strictly on pooled OOF validation scores (`sp_paper <= 0.01` on German in `configs/german-roc-profit.toml`, `sp_paper <= 0.005` on Taiwan in `configs/taiwan-roc-profit.toml`) and evaluates once with frozen parameters on `test`.
+- **Shared metrics**: evaluate post-processed decisions directly via `fair_credit_scoring.evaluate_metrics(y, a, score, decision)` or configure `postprocessor = "reject_option"` and `[postprocessor_params]` (or custom `Hooks(postprocessors=...)`) with `selection_metric = "profit_eq16"`. Undefined rates return `math.nan` (`null` in JSON).
+- **Covariates**: baseline, Reweighing, and Reject Option configs include binary `AGE` (`= a`) in `dataset.numeric`; Prejudice Remover configs exclude `AGE` and route coefficients directly via `a`.
+- **Findings**: see [the final analysis](docs/final-analysis.md).
 
 ## Prepared data and configuration
 
@@ -96,7 +106,7 @@ Register custom components by name using `Hooks`, then select them in `RunConfig
 | `weights` | `weight(y, a) -> weights` in training-row order. Called once per training fold and once on all development rows. Select via `weight`. Built-in `reweighing` supports direct weighting or training-row resampling via `weight_mode`. |
 | `estimators` | `factory(params, seed, threads) -> estimator`. Implement `fit(X, y, *, a, sample_weight)`, `predict_proba(X, *, a)` and `classes_`. Matrices can be dense or sparse. Built-in options: `logistic_regression`, `random_forest`, and `prejudice_remover`. See `SklearnEstimator` for adapting scikit-learn classifiers. Select via `models.estimator`. |
 | `metrics` | `metric(y, a, score, decision) -> float`. Built-ins: `auc`, `balanced_accuracy`, `approval_rate`, `profit_eq16`, `ind`, `sp_paper`, `sf`, `eo_gap`, and group rates (`approval_rate_{0,1}`, `tpr_{0,1}`, `fpr_{0,1}`, `ppv_{0,1}`). Use `selection_metric` to maximize it during tuning or `metrics` to add it to the report. |
-| `postprocessors` | A no-argument factory whose instance implements `fit(score, y, a, threshold)` and `predict(score, a) -> decisions`. An instance fits on the selected out-of-fold predictions for one model. Select via `postprocessor`. |
+| `postprocessors` | A factory `factory(**postprocessor_params)` whose instance implements `fit(score, y, a, threshold)` and `predict(score, a) -> decisions`. An instance fits on the selected out-of-fold predictions for one model. Built-in option: `reject_option` (`RejectOptionClassifier`). Select via `postprocessor` and configure via `[postprocessor_params]` (`fairness_metric`, `fairness_bound`, `utility_metric`, `tune_threshold`, `thresholds`, `n_thresholds`, `n_margins`, `max_margin`). |
 
 The CLI supports the built-in components. Pass a `Hooks` registry to the library entry point for project-specific methods. Custom components should use the supplied seed and thread budget and return finite scores and binary decisions.
 
@@ -107,9 +117,9 @@ The CLI supports the built-in components. Pass a `Hooks` registry to the library
 | `splits.csv` | One stable ID per row with `partition`, `validation_fold` (0–4 on development) and `split_id`. |
 | `validation_predictions.csv` | Out-of-fold predictions from the selected model settings. |
 | `test_predictions.csv` | Held-out predictions from models refit on the development set. |
-| `run.json` | Resolved configuration, seed, split ID, dependency versions, selected parameters and thresholds, and validation and test metrics. |
+| `run.json` | Resolved configuration, seed, split ID, dependency versions, selected parameters, thresholds, any `postprocessor` metadata, and validation and test metrics. |
 
-Prediction columns are `row_id`, `y`, `a`, `score` (repayment probability), `decision` (1 = approved), `run_id`, `dataset`, `model`, `split_id`, `partition`, and `validation_fold`. The fold is blank for test rows. Validation metrics describe the predictions used to select or calibrate settings. The test metrics measure held-out performance.
+Prediction columns are `row_id`, `y`, `a`, `score` (repayment probability), `decision` (1 = approved), `run_id`, `dataset`, `model`, `split_id`, `partition`, and `validation_fold`. When a `postprocessor` is configured, prediction CSVs also include `decision_before` (from `score >= threshold`) and `decision_after` (`== decision`). The fold is blank for test rows. Validation metrics describe the predictions used to select or calibrate settings. The test metrics measure held-out performance.
 
 ## Benchmarks
 

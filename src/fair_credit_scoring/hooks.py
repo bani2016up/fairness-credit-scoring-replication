@@ -12,6 +12,7 @@ from sklearn.linear_model import LogisticRegression
 from .config import DatasetConfig
 from .metrics import METRICS
 from .prejudice_remover import prejudice_remover_factory
+from .reject_option import RejectOptionClassifier
 from .reweighing import reweighing
 
 
@@ -41,7 +42,9 @@ class Hooks:
     weights: dict[str, Weight] = field(default_factory=dict)
     estimators: dict[str, EstimatorFactory] = field(default_factory=dict)
     metrics: dict[str, Metric] = field(default_factory=dict)
-    postprocessors: dict[str, Callable[[], Postprocessor]] = field(default_factory=dict)
+    postprocessors: dict[str, Callable[..., Postprocessor]] = field(
+        default_factory=dict
+    )
 
 
 class SklearnEstimator:
@@ -82,3 +85,5 @@ BUILTIN_ESTIMATORS = {
 BUILTIN_WEIGHTS = {"reweighing": reweighing}
 
 BUILTIN_METRICS = dict(METRICS)
+
+BUILTIN_POSTPROCESSORS = {"reject_option": RejectOptionClassifier}

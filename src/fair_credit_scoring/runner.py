@@ -15,7 +15,13 @@ from threadpoolctl import threadpool_limits
 
 from .config import RunConfig
 from .data import load_csv, make_splits, prepare_dataset
-from .hooks import BUILTIN_ESTIMATORS, BUILTIN_METRICS, BUILTIN_WEIGHTS, Hooks
+from .hooks import (
+    BUILTIN_ESTIMATORS,
+    BUILTIN_METRICS,
+    BUILTIN_POSTPROCESSORS,
+    BUILTIN_WEIGHTS,
+    Hooks,
+)
 from .preprocessing import make_preprocessor, prepare_fold
 
 
@@ -114,14 +120,29 @@ def _decisions(score, a, threshold, postprocessor):
     return decision.astype(np.int8)
 
 
-def _predictions(data, rows, scores, decisions, config, model, splits, partition):
-    return pd.DataFrame(
+def _predictions(
+    data,
+    rows,
+    scores,
+    decisions,
+    config,
+    model,
+    splits,
+    partition,
+    decision_before=None,
+):
+    frame = {
+        "row_id": data.row_id[rows],
+        "y": data.y[rows],
+        "a": data.a[rows],
+        "score": scores,
+        "decision": decisions,
+    }
+    if decision_before is not None:
+        frame["decision_before"] = decision_before
+        frame["decision_after"] = decisions
+    frame.update(
         {
-            "row_id": data.row_id[rows],
-            "y": data.y[rows],
-            "a": data.a[rows],
-            "score": scores,
-            "decision": decisions,
             "run_id": config.run_id,
             "dataset": config.dataset.name,
             "model": model.name,
@@ -132,6 +153,7 @@ def _predictions(data, rows, scores, decisions, config, model, splits, partition
             else "",
         }
     )
+    return pd.DataFrame(frame)
 
 
 def _evaluate(metrics, y, a, score, decision):
@@ -244,12 +266,23 @@ def _run_models(config, data, splits, factories, weight, post_factory, metrics, 
         params, val_score, threshold, objective_value = _select(
             candidates[i], scores[i], config.thresholds, objective, dev_y, dev_a
         )
-        postprocessor = None if post_factory is None else post_factory()
+        postprocessor = (
+            None
+            if post_factory is None
+            else (
+                post_factory(**config.postprocessor_params)
+                if config.postprocessor_params
+                else post_factory()
+            )
+        )
         if postprocessor is not None:
             postprocessor.fit(val_score, dev_y, dev_a, threshold)
         policies.append(postprocessor)
         val_decision = _decisions(val_score, dev_a, threshold, postprocessor)
-        selection[model.name] = {
+        val_decision_before = (
+            None if postprocessor is None else (val_score >= threshold).astype(np.int8)
+        )
+        model_selection = {
             "params": params,
             "threshold": threshold,
             "selection_value": objective_value,
@@ -257,8 +290,19 @@ def _run_models(config, data, splits, factories, weight, post_factory, metrics, 
                 metrics, dev_y, dev_a, val_score, val_decision
             ),
         }
+        if postprocessor is not None and hasattr(postprocessor, "metadata"):
+            model_selection["postprocessor"] = postprocessor.metadata()
+        selection[model.name] = model_selection
         _predictions(
-            data, dev, val_score, val_decision, config, model, splits, "validation"
+            data,
+            dev,
+            val_score,
+            val_decision,
+            config,
+            model,
+            splits,
+            "validation",
+            decision_before=val_decision_before,
         ).to_csv(
             output / "validation_predictions.csv", index=False, mode="a", header=i == 0
         )
@@ -290,11 +334,24 @@ def _run_models(config, data, splits, factories, weight, post_factory, metrics, 
         test_decision = _decisions(
             test_score, test_a, settings["threshold"], postprocessor
         )
+        test_decision_before = (
+            None
+            if postprocessor is None
+            else (test_score >= settings["threshold"]).astype(np.int8)
+        )
         settings["test_metrics"] = _evaluate(
             metrics, test_y, test_a, test_score, test_decision
         )
         _predictions(
-            data, test, test_score, test_decision, config, model, splits, "test"
+            data,
+            test,
+            test_score,
+            test_decision,
+            config,
+            model,
+            splits,
+            "test",
+            decision_before=test_decision_before,
         ).to_csv(output / "test_predictions.csv", index=False, mode="a", header=i == 0)
     return selection
 
@@ -320,7 +377,11 @@ def run(config: RunConfig, hooks: Hooks | None = None) -> Path:
     post_factory = (
         None
         if config.postprocessor is None
-        else _lookup(hooks.postprocessors, config.postprocessor, "postprocessor")
+        else _lookup(
+            BUILTIN_POSTPROCESSORS | hooks.postprocessors,
+            config.postprocessor,
+            "postprocessor",
+        )
     )
     metric_registry = BUILTIN_METRICS | hooks.metrics
     metrics = {

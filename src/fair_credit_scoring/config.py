@@ -68,6 +68,7 @@ class RunConfig:
     weight: str | None = None
     postprocessor: str | None = None
     weight_mode: str = "sample_weight"
+    postprocessor_params: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not _IDENTIFIER.fullmatch(self.run_id):
@@ -92,6 +93,10 @@ class RunConfig:
             raise ValueError("Weight mode must be 'sample_weight' or 'resample'.")
         if self.weight_mode == "resample" and self.weight is None:
             raise ValueError("Resampling requires a weight hook.")
+        if not isinstance(self.postprocessor_params, dict):
+            raise ValueError("postprocessor_params must be a dictionary.")
+        if self.postprocessor is None and self.postprocessor_params:
+            raise ValueError("postprocessor_params requires a postprocessor.")
 
 
 def load_config(path: Path) -> RunConfig:

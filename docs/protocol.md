@@ -64,8 +64,20 @@ $$I(p; a) = \sum_{g \in \{0,1\}} \pi_g \left[ q_g \log\frac{q_g}{q} + (1 - q_g)\
 - **Scaling by $W$**: For optimization, L-BFGS-B minimizes $J / W$ and $\nabla J / W$ together. Dividing the entire objective by positive $W$ preserves the minimizer for fixed data and fixed weights $v_i$, **but does not make the solution invariant to rescaling `sample_weight`** ($v_i \mapsto c v_i$) under fixed `l2_strength`, because BCE and $\eta W I$ scale with $c$ while the L2 term does not.
 - **Sweep retention**: `configs/german-pr-sweep.toml` and `configs/taiwan-pr-sweep.toml` define singleton `ModelConfig` entries (`pr_eta_0` .. `pr_eta_150` for $\eta \in \{0, 1, 5, 15, 30, 50, 70, 100, 150\}$, `l2_strength = 1.0`) so OOF thresholds and predictions are preserved for every $\eta$.
 
+## Reject Option Classification formulation
+
+[`RejectOptionClassifier`](../src/fair_credit_scoring/reject_option.py) implements downstream post-processing on continuous scores $s_i = P(y_i = 1 \mid x_i, a_i)$ with fitted threshold $\tau$ and critical-region half-width $m \ge 0$:
+
+$$\hat{y}_i = \begin{cases} 1, & |s_i - \tau| \le m \text{ and } m > 0 \text{ and } a_i = 0 \text{ (age } \le 25\text{)}, \\ 0, & |s_i - \tau| \le m \text{ and } m > 0 \text{ and } a_i = 1 \text{ (age } > 25\text{)}, \\ \mathbb{I}[s_i \ge \tau], & \text{otherwise.} \end{cases}$$
+
+When $m = 0$, the critical region is empty and predictions reduce to $\mathbb{I}[s_i \ge \tau]$.
+
+- **OOF grid calibration**: On pooled OOF development predictions (`validation_predictions.csv`), `fit` evaluates candidate pairs $(\tau, m)$ across `n_thresholds = 101` (including the base OOF threshold) and `n_margins = 50` in $[0, 0.5]$ (or fixed $\tau$ when `tune_threshold = false`). Among finite candidates satisfying `fairness_metric <= fairness_bound`, it maximizes `utility_metric` (`profit_eq16`), breaking ties by smaller fairness gap, smaller $m$, smaller $|\tau - \tau_{\text{base}}|$, and smaller $\tau$; if no candidate is feasible, it falls back to minimizing `fairness_metric` first, breaking ties by larger utility.
+- **Primary ROC configs**: `configs/german-roc-profit.toml` calibrates `sp_paper <= 0.01` and `configs/taiwan-roc-profit.toml` calibrates `sp_paper <= 0.005`; `fair_credit_scoring.roc_experiment` additionally sweeps `sp_paper`, `ind`, and `eo_gap` across 9 bounds in `[0.0, 0.10]`.
+- **Results and critical review**: See [the final analysis](final-analysis.md) for the 7-variant comparison, `sp_paper` vs `eo_gap` stability study, and replication assessment.
+
 ## Limitations and baseline controls
 
 - **Single seed and non-convexity**: Economic runs use a single split seed (`seed = 1`). For $\eta > 0$, $J(\theta)$ is non-convex, so zero-initialized `L-BFGS-B` finds a deterministic stationary point without a global-optimum guarantee.
-- **Constant-policy controls**: [`timur-control-table.csv`](timur-control-table.csv) evaluates `approve-all` and `reject-all` alongside all 26 trained models on the saved predictions. On German (`70%` repayment rate), `profit_eq16` leads models to `95.75%–99.50%` test approval (where low fairness gaps occur near full approval and 9 of 13 models lose to `approve-all` on test), whereas on Taiwan all 13 models outperform `approve-all` on test.
+- **Constant-policy controls**: [`timur-control-table.csv`](timur-control-table.csv) evaluates `approve-all` and `reject-all` alongside the 26 pre/in-processing and baseline models on the saved predictions, and [the final analysis](final-analysis.md) extends this comparison to all 7 primary variants (including `O1` and `O2`). On German (`70%` repayment rate), `profit_eq16` leads models to `95.75%–99.75%` test approval (where low fairness gaps occur near full approval and 9 of 15 trained models lose to `approve-all` on test), whereas on Taiwan all 15 models outperform `approve-all` on test.
 - **Handoff scope**: `fair_credit_scoring.handoff` checks alignment (`split_id`, `splits.csv`, `row_id`/`y`/`a`/`partition`, row counts, and SHA-256 of the prepared CSVs currently on disk); because input CSV hashes are not recorded inside `run.json`, it verifies current disk state rather than historical file provenance at training time.

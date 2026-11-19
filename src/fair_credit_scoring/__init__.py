@@ -11,6 +11,7 @@ from .metrics import (
     group_confusion_rates,
 )
 from .prejudice_remover import PrejudiceRemover
+from .reject_option import RejectOptionClassifier
 from .runner import run
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "Hooks",
     "ModelConfig",
     "PrejudiceRemover",
+    "RejectOptionClassifier",
     "RunConfig",
     "SklearnEstimator",
     "compute_profit_eq16",

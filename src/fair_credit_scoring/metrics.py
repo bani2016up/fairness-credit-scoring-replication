@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-from ._validation import as_1d_array, as_binary_vector
+from ._validation import _as_score_vector, as_binary_vector
 
 DEFAULT_PROFIT_C = 0.2664
 DEFAULT_PROFIT_P0 = 0.55
@@ -36,22 +36,6 @@ class GroupRates:
     tpr: float
     fpr: float
     ppv: float
-
-
-def _as_score_vector(values, expected_length: int) -> np.ndarray:
-    array = as_1d_array(values, "score")
-    if array.shape[0] != expected_length:
-        raise ValueError("score must have the same length as y.")
-    if not (
-        array.dtype == np.bool_
-        or np.issubdtype(array.dtype, np.integer)
-        or np.issubdtype(array.dtype, np.floating)
-    ):
-        raise ValueError("score must be a finite numeric 1-D vector.")
-    scores = array.astype(np.float64, copy=False)
-    if not np.all(np.isfinite(scores)):
-        raise ValueError("score must contain only finite values.")
-    return scores
 
 
 def _validate_metric_inputs(
